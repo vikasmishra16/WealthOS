@@ -21,78 +21,64 @@ WealthOS is an AI investment advisory system focused on Indian capital markets (
 ## Architecture
 ```mermaid
 flowchart TD
-    %% User Interaction
-    User[User] -->|Interacts with| GradioUI[Gradio UI]
-    
-    %% Gradio UI Tabs
-    GradioUI -->|Stock Analyzer Tab| StockAnalyzer[Stock Analyzer]
-    GradioUI -->|Ask WealthOS Tab| AskWealthOS[Ask WealthOS]
-    GradioUI -->|Market Dashboard Tab| MarketDashboard[Market Dashboard]
-    
-    %% UI to Agent
-    StockAnalyzer -->|Triggers analysis| Agent[llm/agent.py]
-    AskWealthOS -->|Triggers question| Agent
-    MarketDashboard -->|Refreshes data| Agent
-    
-    %% Agent Orchestration
-    Agent -->|Tool Selection| ToolSelector[Tool Selection\n(llm/agent.py:_select_tools)]
-    Agent -->|Tool Execution| ToolExecutor[Tool Execution\n(llm/agent.py:_execute_tools)]
-    Agent -->|LLM Inference| LLMInference[Local LLM Inference\n(Mistral-7B via llama.cpp)]
-    
-    %% Tool Layer
-    ToolSelector -->|Selects tools| Tools[llm/tools.py]
-    ToolExecutor -->|Executes tools| Tools
-    
-    %% Tools to Collectors/Analyzers
-    Tools -->|get_stock_context| ContextBuilder[analyzers/context_builder.py]
-    Tools -->|analyze_technicals| TechnicalAnalyzer[analyzers/technical_analyzer.py]
-    Tools -->|analyze_fundamentals| FundamentalAnalyzer[analyzers/fundamental_analyzer.py]
-    Tools -->|get_news_sentiment| NewsCollector[collectors/news_collector.py]
-    Tools -->|get_macro_context| MacroCollector[collectors/macro_collector.py]
-    Tools -->|get_mf_analysis| MFCollector[collectors/mf_collector.py]
-    Tools -->|get_gold_analysis| GoldCollector[collectors/gold_collector.py]
-    Tools -->|search_mutual_fund| MFSearch[collectors/mf_collector.py]
-    
-    %% Collectors and Analyzers to Data Sources
-    ContextBuilder -->|Uses| PriceCollector[collectors/price_collector.py]
-    ContextBuilder -->|Uses| FundamentalCollector[collectors/fundamental_collector.py]
-    ContextBuilder -->|Uses| NSECollector[collectors/nse_collector.py]
-    ContextBuilder -->|Uses| NewsCollector
-    ContextBuilder -->|Uses| MacroCollector
-    ContextBuilder -->|Uses| GoldCollector
-    
-    TechnicalAnalyzer -->|Uses| PriceCollector
-    FundamentalAnalyzer -->|Uses| FundamentalCollector
-    
-    %% Data Sources
-    PriceCollector -->|Fetches| YahooFinance[Yahoo Finance (yfinance)]
-    FundamentalCollector -->|Scrapes| ScreenerIn[Screener.in]
-    NSECollector -->|Fetches| NSEPython[NSE Python]
-    MFCollector -->|Fetches| MFAPI[mfapi.in]
-    MacroCollector -->|Fetches| VariousAPIs[Various APIs (RBI, Yahoo Finance, etc.)]
-    NewsCollector -->|Fetches| NewsAPIs[News APIs (duckduckgo-search, etc.)]
-    GoldCollector -->|Fetches| YahooFinance
-    
-    %% Persistence Layer
-    PriceCollector -->|Reads/Writes| DuckDB[(DuckDB)\nwealthos.duckdb]
-    FundamentalCollector -->|Reads/Writes| DuckDB
-    NSECollector -->|Reads/Writes| DuckDB
-    NewsCollector -->|Reads/Writes| DuckDB
-    MacroCollector -->|Reads/Writes| DuckDB
-    MFCollector -->|Reads/Writes| DuckDB
-    GoldCollector -->|Reads/Writes| DuckDB
-    
-    %% LLM Inference
-    LLMInference -->|Uses| Model[Mistral-7B Q4_K_M\n(llama.cpp)]
-    
-    %% Response Flow
-    Agent -->|Formats prompt| PromptFormatting[System Prompt + User Question + Tool Results]
-    PromptFormatting -->|Input to| LLMInference
-    LLMInference -->|Generates| Response[Structured Advisory Response\n(ASSESSMENT, KEY METRICS, etc.)]
-    Agent -->|Returns| UIResponse[Gradio UI]
-    UIResponse -->|Displays| User
-```
 
+    User[User] --> GradioUI[Gradio UI]
+
+    GradioUI --> StockAnalyzer[Stock Analyzer]
+    GradioUI --> AskWealthOS[Ask WealthOS]
+    GradioUI --> MarketDashboard[Market Dashboard]
+
+    StockAnalyzer --> Agent[Agent Orchestrator]
+    AskWealthOS --> Agent
+    MarketDashboard --> Agent
+
+    Agent --> ToolSelector[Tool Selection]
+    Agent --> ToolExecutor[Tool Execution]
+    Agent --> LLMInference[Local LLM Inference]
+
+    ToolSelector --> Tools[Tools Layer]
+    ToolExecutor --> Tools
+
+    Tools --> ContextBuilder[Context Builder]
+    Tools --> TechnicalAnalyzer[Technical Analyzer]
+    Tools --> FundamentalAnalyzer[Fundamental Analyzer]
+    Tools --> NewsCollector[News Collector]
+    Tools --> MacroCollector[Macro Collector]
+    Tools --> MFCollector[Mutual Fund Collector]
+    Tools --> GoldCollector[Gold Collector]
+
+    ContextBuilder --> PriceCollector[Price Collector]
+    ContextBuilder --> FundamentalCollector[Fundamental Collector]
+    ContextBuilder --> NSECollector[NSE Collector]
+
+    TechnicalAnalyzer --> PriceCollector
+    FundamentalAnalyzer --> FundamentalCollector
+
+    PriceCollector --> YahooFinance[Yahoo Finance]
+    FundamentalCollector --> ScreenerIn[Screener.in]
+    NSECollector --> NSEPython[NSE Python]
+    MFCollector --> MFAPI[mfapi.in]
+    MacroCollector --> ExternalAPIs[Macro APIs]
+    NewsCollector --> NewsAPIs[News APIs]
+    GoldCollector --> YahooFinance
+
+    PriceCollector --> DuckDB[(DuckDB)]
+    FundamentalCollector --> DuckDB
+    NSECollector --> DuckDB
+    NewsCollector --> DuckDB
+    MacroCollector --> DuckDB
+    MFCollector --> DuckDB
+    GoldCollector --> DuckDB
+
+    LLMInference --> Model[Mistral-7B via llama.cpp]
+
+    Agent --> PromptFormatting[Prompt Construction]
+    PromptFormatting --> LLMInference
+
+    LLMInference --> Response[Structured Investment Response]
+    Response --> GradioUI
+    GradioUI --> User
+```
 ## Technical Design Decisions
 - **DuckDB for Persistence**: Chosen as an embedded analytical database for zero-configuration storage, ACID transactions, and efficient analytical queries on financial time series without needing a separate database server.
 - **Local LLM Inference**: Used llama.cpp to run Mistral-7B Q4_K_M locally for data privacy, cost control, and reduced latency, avoiding reliance on external APIs.
